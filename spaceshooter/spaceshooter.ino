@@ -9,21 +9,29 @@
  #06 DC  -> D7 or any digital
  #07 BLK -> NC
 */
+
+// Inclusão de bibliotecas respectivamente: math.h (funções matematicas), biblioteca para gerar as imagens do jogo (nave, asteroides, explosoes, etc)
+//adafruit.h é a biblioteca para o controle grafico e Arduino_ST7789_Fast.h para o controle da lcd se fazendo necessário a adafruit
 #include <math.h>
 #include "image.h"
+#include <Adafruit_GFX.h>
+#include <Arduino_ST7789_Fast.h>
 #define TFT_DC    7
 #define TFT_RST   8 
 #define SCR_WD   240
 #define SCR_HT   240   // 320 - to allow access to full 240x320 frame buffer
-#include <Adafruit_GFX.h>
-#include <Arduino_ST7789_Fast.h>
+
+//inicalizando o controle da tela lcd
 Arduino_ST7789 lcd = Arduino_ST7789(TFT_DC, TFT_RST);
 uint16_t bgCol    = RGBto565(160,160,160);
 
 /*Analog Joystick config*/
+//biblioteca wire.h para se comunicar com dispostivos I2C
 #include <Wire.h>
 #define x_pin A1
 #define y_pin A2
+
+//setando variaveis de tamanho e velocidade de objetos
 int LR_neutral;
 int UD_neutral;
 int deadzone = 100;
@@ -31,6 +39,7 @@ int movespeed = 10;
 int bulletspeed = 10;
 bool Start = false;
 
+//struct para a posição
 struct Position{
     int x;
     int y;
@@ -44,6 +53,7 @@ int duration = 8;
 Position atualPosition;
 String lastDirection = "up";
 
+//struct de tipos de dados para o controle de objetos
 struct Object{
   Position position;
   String direction;
@@ -58,9 +68,11 @@ class Game{
   int score = 0;
   bool GameOver = false;
 };
-
+//Funções a baixo resumo 
+//criando o tipo de dado para o movimento a partir do Position
 Position processMove(Position atualPosition, String direction, int movespeed) {
   Position result = atualPosition; // Inicializa a posição de retorno com a posição atual
+  // verifica se não está indo na posição de mesmo nome, se caso verdadeiro, faz parar, do contrario adiciona deslocamento naquela direção
   if (direction.indexOf("left") != -1) {
     if (result.x <= 0) {
       result.x = 240;
@@ -91,6 +103,7 @@ Position processMove(Position atualPosition, String direction, int movespeed) {
   }
   return result;
 }
+//Assim como o nome diz, movimento os objetos na tela, pegando o objeto em si, e o redesenhando na tela somando a posição cartesiana ao vetor unitário de posição.
 void moveObjects(Object objects[], int numberOfObjects, int objectWidth, int objectHeight, int move) {
   for (int i = 0; i < numberOfObjects; i++) {
     if (!objects[i].finished) {
@@ -107,6 +120,7 @@ void moveObjects(Object objects[], int numberOfObjects, int objectWidth, int obj
     }
   }
 }
+//"desenha" os objetos na tela conforme a posção cartesiana
 void printObjects(Object objects[], int numObjects, int objectWidth, int objectHeight, const uint16_t* image) {
   for (int i = 0; i < numObjects; i++) {
     if (!objects[i].finished) {
@@ -120,7 +134,7 @@ void initObjects(Object objects[], int numObjects) {
       objects[i].duration = 0;
   } 
 }
-
+//classe para o objeto "nave"
 class SpaceShip{
   public:
     int Width = 12;
@@ -130,6 +144,7 @@ class SpaceShip{
     int movespeed;
     int bulletSpeed;
     Object bullets[5];
+    //monta a estrutura da nave
     SpaceShip(Position startposition = {120, 120},String startDirection = "up", int mspeed = 10, int bspeed = 10) 
     {
       atualPosition = startposition;
@@ -137,6 +152,7 @@ class SpaceShip{
       movespeed = mspeed;
       bspeed = bspeed;
     }
+    //metodo para movimentar a nave pela tela
     void MoveShipPosition(String direction){
       Position newPosition = processMove(atualPosition, direction, movespeed);
       if(newPosition.x != atualPosition.x || newPosition.y != atualPosition.y){
@@ -147,6 +163,7 @@ class SpaceShip{
         }
         atualPosition.x = newPosition.x;
         atualPosition.y = newPosition.y;
+        //condições para desenhar na tela conforme a posição da nave
         if (lastDirection == "up") {
           lcd.drawImageF(atualPosition.x, atualPosition.y,Width,Height,ship_up);
         } else if (lastDirection == "left-up") {
@@ -170,7 +187,7 @@ class SpaceShip{
     //       lcd.drawImageF(atualPosition.x, atualPosition.y,12,12,ship_up);
     // }
 };
-
+//setando a coleçao asteroid
 class AsteroidsCollection{
   public:
   int Width = 20;
@@ -178,6 +195,7 @@ class AsteroidsCollection{
   int movespeed = 6;
   int numberOfAsteroids = 3;
   Object asteroids[3];
+  //iniciando o metodo de inicio para os asteroides aparecerem na tela
   AsteroidsCollection(int mspeed = 6) 
   {
     movespeed = mspeed;
@@ -186,9 +204,11 @@ class AsteroidsCollection{
   initAsteroids(){
     initObjects(asteroids, numberOfAsteroids);
   }
+  //metodo par iniciar os ateroides de aparecerem na tela randomicamente
   void spawnAsteroids(){
     int randomValue = random(100);  // Gera um número aleatório entre 0 e 99
     if (randomValue < 60) {
+      //iteração para gerar os asteroides aleatoriamente numa posição e movimento aleatorios
       for(int i=0; i<numberOfAsteroids; i++){
         if(asteroids[i].finished == true){
           int randomValueForDirection = random(0,120)/20;
@@ -233,6 +253,7 @@ class AsteroidsCollection{
   }
 };
 
+//classe do objeto de tiros da nave
 class BulletsCollection{
   public:
   int Width = 9;
@@ -252,6 +273,7 @@ class BulletsCollection{
   printBullets(){
     printObjects(bullets, numberOfBullets, Width, Height, shot);
   }
+  //metodo para criar a bala conforme a posição/direção da nave
   void createShot(SpaceShip ship){
     for(int i=0; i<numberOfBullets; i++){
       if(bullets[i].finished == true){
@@ -269,7 +291,7 @@ class BulletsCollection{
     moveObjects(bullets,numberOfBullets,Width,Height, movespeed );
   }
 };
-
+//classe para colisão 
 class ColisionCollection{
   public:
   int Width = 20;
@@ -284,6 +306,7 @@ class ColisionCollection{
   initColisions(){
     initObjects(colisions, numberOfColisions);
   }
+  //metodo para detectar as colisões conforme a posição e tamanho dos objetos
   void detectColision(Game& game, AsteroidsCollection& asteroids, BulletsCollection& bullets, SpaceShip& spaceShip){
     for(int i=0; i<asteroids.numberOfAsteroids; i++){
       if(asteroids.asteroids[i].finished == false){
@@ -320,7 +343,8 @@ class ColisionCollection{
               break;
             }
           }
-        }
+        } 
+        //iterando a posição da bala com a posição do asteroide para criar a colisão
         for(int j=0; j<bullets.numberOfBullets; j++){
           if(bullets.bullets[j].finished == false){
             int impactRangeX = 12;
@@ -361,6 +385,7 @@ class ColisionCollection{
         }
       }
   }
+  //função para criar o efeito de explosão ao colidir e sumir com o objeto da tela
   void printColisions(){
     for(int i=0; i<numberOfColisions; i++){
       lcd.setCursor(colisions[i].position.x,colisions[i].position.y);
@@ -386,7 +411,7 @@ BulletsCollection bullets;
 AsteroidsCollection asteroids;
 ColisionCollection colisions;
 Game game;
-
+//inicio do programa
 void setup() {
   /*Buttons setup*/
   pinMode(botaoAzul,INPUT_PULLUP);
@@ -405,7 +430,7 @@ void setup() {
   Serial.begin(9600);
   LR_neutral = analogRead(x_pin);
   UD_neutral = analogRead(y_pin);
-  
+  //desenha os objetos todos
   lcd.drawImageF(0,0,12,12,ship_up);
   lcd.drawImageF(12,0,12,12,ship_left);
   lcd.drawImageF(24,0,12,12,ship_right);
@@ -421,7 +446,9 @@ void setup() {
   lcd.drawImageF(80,80,72,53,title);
 }
 
+//loop de verificação a cada 
 void loop() {
+  // se o jogo nao tiver começado inicia a tela inicial para apertar o botao de start
   if(!game.Start){
     lcd.setCursor(50, 150);
     lcd.print("             ");
@@ -434,6 +461,7 @@ void loop() {
       game.Start = true;
       lcd.clearScreen();
     } 
+    // se ja tiver começado inicializa todos os objetos e metodos para executar o jogo
   } else{ 
     int LR = analogRead(x_pin);
     int UD = analogRead(y_pin);
@@ -492,7 +520,7 @@ void loop() {
       }
   } 
 }
-
+//pega a direção do angulo do joystick
 float joystickAngle(int x, int y) {
   float deltaX = x - LR_neutral;
   float deltaY = y - UD_neutral;
@@ -504,6 +532,7 @@ float joystickAngle(int x, int y) {
   return deg;
 }
 
+//pega a direção e joga para o result para fazer a nave se moverimage.png
 String readAnalogDirection(int LR, int UD){
   String result = "";
   if(LR > LR_neutral+deadzone){
